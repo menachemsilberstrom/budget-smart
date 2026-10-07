@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetSmart - Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- App Header -->
+      <header class="app-header">
+        <a href="/dashboard.html" class="brand-wrapper">
+          <div class="brand-icon">₪</div>
+          <span class="brand-title">BudgetSmart</span>
+        </a>
+        <div class="header-actions">
+          <button id="lang-toggle-btn" class="lang-toggle">English</button>
+          <button id="logout-btn" class="btn btn-outline btn-icon" title="Logout">
+            🚪
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Month Selector -->
+        <div class="month-selector">
+          <button id="prev-month-btn" class="month-nav-btn" aria-label="Previous Month">❮</button>
+          <div id="current-month-label" class="month-label">טוען...</div>
+          <button id="next-month-btn" class="month-nav-btn" aria-label="Next Month">❯</button>
+        </div>
+
+        <!-- Monthly Budget Card -->
+        <div class="budget-hero-card">
+          <div class="flex-between">
+            <span style="font-weight: 700; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em;" data-i18n="monthlyBudget">
+              תקציב חודשי
+            </span>
+            <button id="edit-budget-btn" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.15); color: #fff; border: none;" data-i18n="editBudget">
+              ערוך תקציב
+            </button>
+          </div>
+
+          <div class="budget-stats-grid">
+            <div class="stat-item">
+              <div class="stat-label" data-i18n="plannedBudget">תקציב מתוכנן</div>
+              <div class="stat-value" id="stat-planned">₪0</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label" data-i18n="totalSpent">סך הוצאות</div>
+              <div class="stat-value" id="stat-spent">₪0</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="progress-track">
+              <div class="progress-fill" id="budget-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-text">
+              <span id="budget-percent-text">0% נוצל</span>
+              <span id="budget-status-badge" style="font-weight: 700;">במסגרת התקציב</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.85rem; color: #94a3b8;" data-i18n="remaining">יתרה לתקציב:</span>
+            <span id="stat-remaining" style="font-size: 1.15rem; font-weight: 800; color: #34d399;">₪0</span>
+          </div>
+        </div>
+
+        <!-- Category Budgets Tracking (Remaining per category) -->
+        <div class="card">
+          <div class="card-title">
+            <span data-i18n="categoryBudgets">מעקב תקציב לפי קטגוריות</span>
+            <a href="/categories.html" class="text-muted" style="font-size: 0.82rem; text-decoration: none;" data-i18n="manageCategories">
+              ⚙️ הגדרות
+            </a>
+          </div>
+          <div id="category-budgets-container" style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="text-center text-muted" style="padding: 12px;">טוען יעדי תקציב...</div>
+          </div>
+        </div>
+
+        <!-- Quick Add Expense CTA -->
+        <a href="/add-expense.html" class="btn btn-primary w-full" style="padding: 12px; font-size: 1rem; box-shadow: var(--shadow-md);">
+          <span>➕</span>
+          <span data-i18n="addExpense">הוספת הוצאה חדשה</span>
+        </a>
+
+        <!-- Spending by Category -->
+        <div class="card">
+          <div class="card-title" data-i18n="spendingBreakdown">
+            פילוח הוצאות לפי קטגוריה
+          </div>
+          <div id="category-breakdown-container">
+            <div class="text-center text-muted" style="padding: 12px;">טוען נתונים...</div>
+          </div>
+        </div>
+
+        <!-- Recent Expenses -->
+        <div class="card">
+          <div class="card-title">
+            <span data-i18n="recentExpenses">הוצאות אחרונות</span>
+            <a href="/history.html" class="text-muted" style="font-size: 0.82rem; text-decoration: none;" data-i18n="allExpenses">הכל ❮</a>
+          </div>
+          <div id="recent-expenses-list">
+            <div class="text-center text-muted" style="padding: 12px;">טוען הוצאות...</div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Bottom Navigation Bar -->
+      <nav class="bottom-nav">
+        <a href="/dashboard.html" class="nav-item active">
+          <span class="nav-icon">📊</span>
+          <span data-i18n="dashboard">לוח בקרה</span>
+        </a>
+        <a href="/categories.html" class="nav-item">
+          <span class="nav-icon">🏷️</span>
+          <span data-i18n="categories">קטגוריות</span>
+        </a>
+        <a href="/add-expense.html" class="nav-add-btn" aria-label="Add Expense">
+          ➕
+        </a>
+        <a href="/history.html" class="nav-item">
+          <span class="nav-icon">📜</span>
+          <span data-i18n="history">היסטוריה</span>
+        </a>
+      </nav>
+    </div>
+
+    <script type="module">
+      import { initDashboardPage } from '/js/expenses.js';
+      initDashboardPage();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "BudgetSmart",
+  "description": "Bilingual (Hebrew & English) mobile-first personal finance web application with vanilla TypeScript, Express, and MongoDB.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

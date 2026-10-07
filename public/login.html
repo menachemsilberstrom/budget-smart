@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetSmart - Login</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="auth-container">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+        <button id="lang-toggle-btn" class="lang-toggle">English</button>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 28px;">
+        <div class="brand-icon" style="width: 52px; height: 52px; font-size: 1.8rem; margin: 0 auto 12px auto;">
+          💳
+        </div>
+        <h1 style="font-size: 1.7rem; font-weight: 800; margin-bottom: 6px;" data-i18n="login">התחברות</h1>
+        <p class="text-muted" data-i18n="tagline" style="font-size: 0.95rem;">ניהול תקציב חכם ופשוט</p>
+      </div>
+
+      <div class="card" style="padding: 22px;">
+        <form id="login-form">
+          <div class="form-group">
+            <label class="form-label" for="email" data-i18n="email">אימייל</label>
+            <input
+              type="email"
+              id="email"
+              class="form-input"
+              placeholder="user@example.com"
+              required
+              autocomplete="email"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="password" data-i18n="password">סיסמה</label>
+            <input
+              type="password"
+              id="password"
+              class="form-input"
+              placeholder="••••••••"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary w-full mt-2" data-i18n="loginButton">
+            כניסה לחשבון
+          </button>
+        </form>
+
+        <div class="text-center mt-4">
+          <a href="/register.html" class="text-muted" style="font-size: 0.88rem; text-decoration: none;" data-i18n="noAccount">
+            עדיין אין לך חשבון? הירשם כאן
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/js/auth.js"></script>
+  </body>
+</html>

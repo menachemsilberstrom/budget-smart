@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetSmart - Personal Finance</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="auth-container">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 24px;">
+        <button id="lang-toggle-btn" class="lang-toggle">English</button>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 36px;">
+        <div style="width: 72px; height: 72px; background: linear-gradient(135deg, var(--primary), #3b82f6); border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 2.5rem; color: #fff; box-shadow: 0 10px 25px rgba(37, 99, 235, 0.35); margin-bottom: 16px;">
+          📊
+        </div>
+        <h1 style="font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px;">BudgetSmart</h1>
+        <p class="text-muted" data-i18n="tagline" style="font-size: 1.05rem;">ניהול תקציב חכם ופשוט</p>
+      </div>
+
+      <div class="card" style="display: flex; flex-direction: column; gap: 14px; padding: 24px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+          <div style="font-size: 1.5rem;">📱</div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem;">מותאם במיוחד לנייד</div>
+            <div class="text-muted" style="font-size: 0.8rem;">ממשק נקי ונוח לשימוש בכל סמארטפון</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+          <div style="font-size: 1.5rem;">🌐</div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem;">עברית ואנגלית מלאה</div>
+            <div class="text-muted" style="font-size: 0.8rem;">תמיכה מושלמת ב-RTL וב-LTR</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div style="font-size: 1.5rem;">🔒</div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem;">סנכרון ומאובטח</div>
+            <div class="text-muted" style="font-size: 0.8rem;">גישה מאובטחת מכל המכשירים עם MongoDB</div>
+          </div>
+        </div>
+
+        <a href="/login.html" class="btn btn-primary w-full" data-i18n="login">התחברות</a>
+        <a href="/register.html" class="btn btn-secondary w-full" data-i18n="register">הרשמה</a>
+      </div>
+    </div>
+
+    <script type="module">
+      import { getToken, applyLanguage, getCurrentLang, toggleLanguage } from '/js/api.js';
+      if (getToken()) {
+        window.location.replace('/dashboard.html');
+      } else {
+        applyLanguage(getCurrentLang());
+        document.getElementById('lang-toggle-btn')?.addEventListener('click', () => {
+          toggleLanguage();
+        });
+      }
+    </script>
+  </body>
+</html>

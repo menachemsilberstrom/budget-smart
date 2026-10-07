@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetSmart - Add Expense</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- App Header -->
+      <header class="app-header">
+        <a href="/dashboard.html" class="brand-wrapper">
+          <button class="btn btn-outline btn-icon" style="border:none;" aria-label="Back">
+            ❮
+          </button>
+          <span class="brand-title" data-i18n="addExpense">הוספת הוצאה</span>
+        </a>
+        <div class="header-actions">
+          <button id="lang-toggle-btn" class="lang-toggle">English</button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <form id="add-expense-form" class="card" style="padding: 20px;">
+          <!-- Hidden selected category -->
+          <input type="hidden" id="selected-category-id" required />
+
+          <!-- Amount Input -->
+          <div class="form-group">
+            <label class="form-label" data-i18n="amount">סכום</label>
+            <div class="amount-input-wrapper">
+              <span class="amount-currency">₪</span>
+              <input
+                type="number"
+                step="any"
+                min="0.01"
+                id="expense-amount"
+                class="form-input amount-input-lg"
+                placeholder="0"
+                required
+                autofocus
+              />
+            </div>
+            <!-- Quick Increment Chips -->
+            <div class="quick-amounts">
+              <span class="text-muted" style="font-size: 0.75rem; align-self: center; margin-inline-end: 4px;" data-i18n="quickAdd">מהיר:</span>
+              <button type="button" class="quick-chip" data-add="10">+10 ₪</button>
+              <button type="button" class="quick-chip" data-add="20">+20 ₪</button>
+              <button type="button" class="quick-chip" data-add="50">+50 ₪</button>
+              <button type="button" class="quick-chip" data-add="100">+100 ₪</button>
+              <button type="button" class="quick-chip" data-add="200">+200 ₪</button>
+            </div>
+          </div>
+
+          <!-- Category Selection -->
+          <div class="form-group mt-2">
+            <div class="flex-between">
+              <label class="form-label" data-i18n="category">בחר קטגוריה</label>
+              <a href="/categories.html" style="font-size: 0.8rem; color: var(--primary); text-decoration: none;" data-i18n="manageCategories">
+                + נהל קטגוריות
+              </a>
+            </div>
+            <div id="category-grid-container" class="category-grid">
+              <div class="text-muted text-center" style="grid-column: 1/-1; padding: 16px;">
+                טוען קטגוריות...
+              </div>
+            </div>
+          </div>
+
+          <!-- Date Input -->
+          <div class="form-group mt-2">
+            <label class="form-label" for="expense-date" data-i18n="date">תאריך</label>
+            <input type="date" id="expense-date" class="form-input" required />
+          </div>
+
+          <!-- Note Input -->
+          <div class="form-group">
+            <label class="form-label" for="expense-note" data-i18n="note">הערה (אופציונלי)</label>
+            <input
+              type="text"
+              id="expense-note"
+              class="form-input"
+              placeholder="לדוגמה: קניות לשבת, דלק, מסעדה"
+              data-i18n-placeholder="notePlaceholder"
+            />
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" class="btn btn-primary w-full mt-4" style="min-height: 50px; font-size: 1.05rem;" data-i18n="saveExpense">
+            שמור הוצאה
+          </button>
+        </form>
+      </main>
+
+      <!-- Bottom Navigation Bar -->
+      <nav class="bottom-nav">
+        <a href="/dashboard.html" class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span data-i18n="dashboard">לוח בקרה</span>
+        </a>
+        <a href="/categories.html" class="nav-item">
+          <span class="nav-icon">🏷️</span>
+          <span data-i18n="categories">קטגוריות</span>
+        </a>
+        <a href="/add-expense.html" class="nav-add-btn" style="filter: brightness(1.15);" aria-label="Add Expense">
+          ➕
+        </a>
+        <a href="/history.html" class="nav-item">
+          <span class="nav-icon">📜</span>
+          <span data-i18n="history">היסטוריה</span>
+        </a>
+      </nav>
+    </div>
+
+    <script type="module">
+      import { initAddExpensePage } from '/js/expenses.js';
+      initAddExpensePage();
+    </script>
+  </body>
+</html>

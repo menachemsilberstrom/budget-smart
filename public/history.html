@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetSmart - History</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- App Header -->
+      <header class="app-header">
+        <a href="/dashboard.html" class="brand-wrapper">
+          <div class="brand-icon">📜</div>
+          <span class="brand-title" data-i18n="history">היסטוריה</span>
+        </a>
+        <div class="header-actions">
+          <button id="lang-toggle-btn" class="lang-toggle">English</button>
+          <button id="logout-btn" class="btn btn-outline btn-icon" title="Logout">
+            🚪
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Filter Card -->
+        <div class="card" style="padding: 14px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" style="font-size: 0.78rem;" data-i18n="filterByMonth">חודש</label>
+              <input type="month" id="history-month-filter" class="form-input" style="min-height: 40px; padding: 6px 10px; font-size: 0.88rem;" />
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" style="font-size: 0.78rem;" data-i18n="category">קטגוריה</label>
+              <select id="history-category-filter" class="form-select" style="min-height: 40px; padding: 6px 10px; font-size: 0.88rem;">
+                <option value="">כל הקטגוריות</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Total Sum Banner -->
+        <div style="background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 600; color: var(--text-muted);" data-i18n="totalFiltered">סך הכל מסונן:</span>
+          <span id="history-total-sum" style="font-size: 1.25rem; font-weight: 800; color: var(--text-main);">₪0</span>
+        </div>
+
+        <!-- History Expenses List -->
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <div id="history-list">
+            <div class="text-center text-muted" style="padding: 24px;">טוען היסטוריה...</div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Bottom Navigation Bar -->
+      <nav class="bottom-nav">
+        <a href="/dashboard.html" class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span data-i18n="dashboard">לוח בקרה</span>
+        </a>
+        <a href="/categories.html" class="nav-item">
+          <span class="nav-icon">🏷️</span>
+          <span data-i18n="categories">קטגוריות</span>
+        </a>
+        <a href="/add-expense.html" class="nav-add-btn" aria-label="Add Expense">
+          ➕
+        </a>
+        <a href="/history.html" class="nav-item active">
+          <span class="nav-icon">📜</span>
+          <span data-i18n="history">היסטוריה</span>
+        </a>
+      </nav>
+    </div>
+
+    <script type="module">
+      import { initHistoryPage } from '/js/expenses.js';
+      initHistoryPage();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetSmart - Categories</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- App Header -->
+      <header class="app-header">
+        <a href="/dashboard.html" class="brand-wrapper">
+          <div class="brand-icon">🏷️</div>
+          <span class="brand-title" data-i18n="categories">קטגוריות</span>
+        </a>
+        <div class="header-actions">
+          <button id="lang-toggle-btn" class="lang-toggle">English</button>
+          <button id="logout-btn" class="btn btn-outline btn-icon" title="Logout">
+            🚪
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <div class="flex-between mb-2">
+          <h2 style="font-size: 1.15rem; font-weight: 700;" data-i18n="manageCategories">
+            ניהול קטגוריות
+          </h2>
+          <button id="open-add-category-btn" class="btn btn-primary btn-sm">
+            <span>➕</span>
+            <span data-i18n="addCategory">הוסף קטגוריה</span>
+          </button>
+        </div>
+
+        <div id="categories-list">
+          <div class="text-center text-muted" style="padding: 20px;">טוען קטגוריות...</div>
+        </div>
+      </main>
+
+      <!-- Bottom Navigation Bar -->
+      <nav class="bottom-nav">
+        <a href="/dashboard.html" class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span data-i18n="dashboard">לוח בקרה</span>
+        </a>
+        <a href="/categories.html" class="nav-item active">
+          <span class="nav-icon">🏷️</span>
+          <span data-i18n="categories">קטגוריות</span>
+        </a>
+        <a href="/add-expense.html" class="nav-add-btn" aria-label="Add Expense">
+          ➕
+        </a>
+        <a href="/history.html" class="nav-item">
+          <span class="nav-icon">📜</span>
+          <span data-i18n="history">היסטוריה</span>
+        </a>
+      </nav>
+    </div>
+
+    <script type="module" src="/js/categories.js"></script>
+  </body>
+</html>
