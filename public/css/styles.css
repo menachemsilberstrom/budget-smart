@@ -545,8 +545,8 @@ html, body {
 
 /* Category Grid / Selector */
 .category-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 6px;
 }
