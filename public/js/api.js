@@ -76,6 +76,17 @@ const translations = {
     outOf: { he: 'מתוך', en: 'out of' },
     budgetReached: { he: 'התקציב מוצה (100%)', en: 'Budget reached (100%)' },
     budgetUpdated: { he: 'התקציב עודכן בהצלחה', en: 'Budget updated successfully' },
+    autoCalculatedBudget: { he: 'מחושב אוטומטית מסכום קטגוריות', en: 'Auto-calculated from category totals' },
+    paidBy: { he: 'מי שילם / רשם', en: 'Who paid / recorded' },
+    paidByPlaceholder: { he: 'למשל: מנחם, שרה...', en: 'e.g. Menachem, Sarah...' },
+    recentWriters: { he: 'אנשים אחרונים', en: 'Recent people' },
+    editExpense: { he: 'ערוך הוצאה', en: 'Edit Expense' },
+    expenseUpdated: { he: 'ההוצאה עודכנה בהצלחה', en: 'Expense updated successfully' },
+    categoryExpenses: { he: 'הוצאות לפי קטגוריה', en: 'Expenses by Category' },
+    noExpensesForCategory: { he: 'אין הוצאות לקטגוריה זו בחודש זה', en: 'No expenses for this category this month' },
+    close: { he: 'סגור', en: 'Close' },
+    manageCategoriesForMonth: { he: 'קטגוריות לחודש', en: 'Categories for' },
+    categoryMonthNote: { he: 'שינויים יחולו מחודש זה ואילך', en: 'Changes apply from this month forward' },
 };
 // Language State
 const LANG_KEY = 'budgetsmart_lang';
@@ -223,6 +234,7 @@ export const api = {
     get: (url) => request(url, { method: 'GET' }),
     post: (url, body) => request(url, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
     put: (url, body) => request(url, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
+    patch: (url, body) => request(url, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
     delete: (url) => request(url, { method: 'DELETE' }),
 };
 // -------------------------------------------------------------

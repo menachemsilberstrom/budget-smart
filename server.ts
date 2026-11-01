@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import mongoose, { Schema, Types } from 'mongoose';
 import 'dotenv/config';
 
 // Force Node.js to use public DNS servers (Google 8.8.8.8 and Cloudflare 1.1.1.1)
@@ -82,6 +82,8 @@ interface ICategoryDoc {
   icon: string;
   color: string;
   budgetLimit?: number;
+  validFromMonth?: string;   // YYYY-MM, inclusive start ("0000-01" = always)
+  invalidFromMonth?: string; // YYYY-MM, category is hidden from this month onwards (null = still valid)
 }
 
 interface IExpenseDoc {
@@ -91,6 +93,7 @@ interface IExpenseDoc {
   amount: number;
   date: string; // ISO date YYYY-MM-DD
   note?: string;
+  paidBy?: string; // who recorded / paid this expense
 }
 
 interface IMonthlyBudgetDoc {
@@ -127,6 +130,8 @@ const CategorySchema = new Schema({
   icon: { type: String, default: '🏷️' },
   color: { type: String, default: '#3b82f6' },
   budgetLimit: { type: Number, default: 0 },
+  validFromMonth: { type: String, default: '0000-01' },
+  invalidFromMonth: { type: String, default: null },
 });
 
 const ExpenseSchema = new Schema({
@@ -135,6 +140,7 @@ const ExpenseSchema = new Schema({
   amount: { type: Number, required: true, min: 0 },
   date: { type: String, required: true, index: true },
   note: { type: String, default: '' },
+  paidBy: { type: String, default: '' },
 });
 
 const MonthlyBudgetSchema = new Schema({
@@ -193,11 +199,31 @@ async function seedDefaultCategories(userId: string) {
     if (userCats.length === 0) {
       for (const cat of DEFAULT_CATEGORIES) {
         const id = new Types.ObjectId().toString();
-        memoryStore.categories.set(id, { _id: id, userId, ...cat });
+        memoryStore.categories.set(id, { _id: id, userId, validFromMonth: '0000-01', ...cat });
       }
       memoryStore.saveCategories();
     }
   }
+}
+
+// Returns categories valid for a given YYYY-MM month string
+function filterCategoriesForMonth(cats: ICategoryDoc[], month: string): ICategoryDoc[] {
+  return cats.filter((c) => {
+    const vfm = c.validFromMonth || '0000-01';
+    const ifm = c.invalidFromMonth;
+    return vfm <= month && (!ifm || ifm > month);
+  });
+}
+
+// Calculate the sum of budget limits for categories valid in a given month
+async function getCategoryBudgetSum(userId: string, month: string): Promise<number> {
+  let cats: ICategoryDoc[] = [];
+  if (isMongoConnected) {
+    cats = (await CategoryModel.find({ userId }).lean()) as any as ICategoryDoc[];
+  } else {
+    cats = Array.from(memoryStore.categories.values()).filter((c) => c.userId === userId);
+  }
+  return filterCategoriesForMonth(cats, month).reduce((sum, c) => sum + (c.budgetLimit || 0), 0);
 }
 
 // -------------------------------------------------------------
@@ -336,17 +362,25 @@ app.get('/auth/me', authMiddleware, async (req: AuthRequest, res: Response): Pro
 // Categories Routes
 // -------------------------------------------------------------
 
-// GET /categories
+// GET /categories?month=YYYY-MM
 app.get('/categories', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
     await seedDefaultCategories(userId);
+    const { month } = req.query;
 
-    let categories: any[] = [];
+    let categories: ICategoryDoc[] = [];
     if (isMongoConnected) {
-      categories = await CategoryModel.find({ userId }).lean();
+      categories = (await CategoryModel.find({ userId }).lean()) as any as ICategoryDoc[];
     } else {
       categories = Array.from(memoryStore.categories.values()).filter((c) => c.userId === userId);
+    }
+
+    if (month && typeof month === 'string') {
+      categories = filterCategoriesForMonth(categories, month);
+    } else {
+      // Default: hide soft-deleted categories
+      categories = categories.filter((c) => !c.invalidFromMonth);
     }
 
     res.json(categories);
@@ -355,11 +389,12 @@ app.get('/categories', authMiddleware, async (req: AuthRequest, res: Response): 
   }
 });
 
-// POST /categories
+// POST /categories?month=YYYY-MM
 app.post('/categories', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
     const { name_he, name_en, icon, color, budgetLimit } = req.body;
+    const month = req.query.month as string | undefined;
 
     if (!name_he || !name_en) {
       res.status(400).json({ error: 'Both Hebrew and English category names are required' });
@@ -369,6 +404,7 @@ app.post('/categories', authMiddleware, async (req: AuthRequest, res: Response):
     const finalIcon = icon || '🏷️';
     const finalColor = color || '#3b82f6';
     const finalBudgetLimit = budgetLimit !== undefined ? Math.max(0, parseFloat(budgetLimit) || 0) : 0;
+    const validFromMonth = month || '0000-01';
 
     if (isMongoConnected) {
       const created = await CategoryModel.create({
@@ -378,6 +414,7 @@ app.post('/categories', authMiddleware, async (req: AuthRequest, res: Response):
         icon: finalIcon,
         color: finalColor,
         budgetLimit: finalBudgetLimit,
+        validFromMonth,
       });
       res.status(201).json(created);
     } else {
@@ -390,6 +427,7 @@ app.post('/categories', authMiddleware, async (req: AuthRequest, res: Response):
         icon: finalIcon,
         color: finalColor,
         budgetLimit: finalBudgetLimit,
+        validFromMonth,
       };
       memoryStore.categories.set(_id, newCat);
       memoryStore.saveCategories();
@@ -400,62 +438,122 @@ app.post('/categories', authMiddleware, async (req: AuthRequest, res: Response):
   }
 });
 
-// PUT /categories/:id
+// PUT /categories/:id?month=YYYY-MM
+// With ?month: forward-only change (invalidate old version, create new from that month)
+// Without ?month: in-place global update (backward compat)
 app.put('/categories/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
     const { id } = req.params;
     const { name_he, name_en, icon, color, budgetLimit } = req.body;
+    const month = req.query.month as string | undefined;
     const numBudgetLimit = budgetLimit !== undefined ? Math.max(0, parseFloat(budgetLimit) || 0) : undefined;
 
     if (isMongoConnected) {
-      const updated = await CategoryModel.findOneAndUpdate(
-        { _id: id, userId },
-        {
-          ...(name_he && { name_he: name_he.trim() }),
-          ...(name_en && { name_en: name_en.trim() }),
-          ...(icon && { icon }),
-          ...(color && { color }),
-          ...(numBudgetLimit !== undefined && { budgetLimit: numBudgetLimit }),
-        },
-        { new: true }
-      );
-      if (!updated) {
+      const existing: any = await CategoryModel.findOne({ _id: id, userId }).lean();
+      if (!existing) {
         res.status(404).json({ error: 'Category not found' });
         return;
       }
-      res.json(updated);
+
+      if (month && existing.validFromMonth !== month) {
+        // Forward-only: invalidate current version, create new version from this month
+        await CategoryModel.findOneAndUpdate({ _id: id, userId }, { invalidFromMonth: month });
+        const newCat = await CategoryModel.create({
+          userId,
+          name_he: name_he ? name_he.trim() : existing.name_he,
+          name_en: name_en ? name_en.trim() : existing.name_en,
+          icon: icon || existing.icon,
+          color: color || existing.color,
+          budgetLimit: numBudgetLimit !== undefined ? numBudgetLimit : (existing.budgetLimit || 0),
+          validFromMonth: month,
+        });
+        res.json(newCat);
+      } else {
+        const updated = await CategoryModel.findOneAndUpdate(
+          { _id: id, userId },
+          {
+            ...(name_he && { name_he: name_he.trim() }),
+            ...(name_en && { name_en: name_en.trim() }),
+            ...(icon && { icon }),
+            ...(color && { color }),
+            ...(numBudgetLimit !== undefined && { budgetLimit: numBudgetLimit }),
+          },
+          { new: true }
+        );
+        res.json(updated);
+      }
     } else {
       const cat = memoryStore.categories.get(id);
       if (!cat || cat.userId !== userId) {
         res.status(404).json({ error: 'Category not found' });
         return;
       }
-      if (name_he) cat.name_he = name_he.trim();
-      if (name_en) cat.name_en = name_en.trim();
-      if (icon) cat.icon = icon;
-      if (color) cat.color = color;
-      if (numBudgetLimit !== undefined) cat.budgetLimit = numBudgetLimit;
-      memoryStore.categories.set(id, cat);
-      memoryStore.saveCategories();
-      res.json(cat);
+
+      if (month && cat.validFromMonth !== month) {
+        // Forward-only: soft-invalidate old, create new version
+        cat.invalidFromMonth = month;
+        memoryStore.categories.set(id, cat);
+
+        const newId = new Types.ObjectId().toString();
+        const newCat: ICategoryDoc = {
+          _id: newId,
+          userId,
+          name_he: name_he ? name_he.trim() : cat.name_he,
+          name_en: name_en ? name_en.trim() : cat.name_en,
+          icon: icon || cat.icon,
+          color: color || cat.color,
+          budgetLimit: numBudgetLimit !== undefined ? numBudgetLimit : (cat.budgetLimit || 0),
+          validFromMonth: month,
+        };
+        memoryStore.categories.set(newId, newCat);
+        memoryStore.saveCategories();
+        res.json(newCat);
+      } else {
+        if (name_he) cat.name_he = name_he.trim();
+        if (name_en) cat.name_en = name_en.trim();
+        if (icon) cat.icon = icon;
+        if (color) cat.color = color;
+        if (numBudgetLimit !== undefined) cat.budgetLimit = numBudgetLimit;
+        memoryStore.categories.set(id, cat);
+        memoryStore.saveCategories();
+        res.json(cat);
+      }
     }
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update category: ' + err.message });
   }
 });
 
-// DELETE /categories/:id
+// DELETE /categories/:id?month=YYYY-MM
+// With ?month: forward-only soft delete (set invalidFromMonth) unless category started in this month
+// Without ?month: hard delete
 app.delete('/categories/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
     const { id } = req.params;
+    const month = req.query.month as string | undefined;
 
     if (isMongoConnected) {
-      const result = await CategoryModel.findOneAndDelete({ _id: id, userId });
-      if (!result) {
-        res.status(404).json({ error: 'Category not found' });
-        return;
+      if (month) {
+        const cat: any = await CategoryModel.findOne({ _id: id, userId }).lean();
+        if (!cat) {
+          res.status(404).json({ error: 'Category not found' });
+          return;
+        }
+        if (cat.validFromMonth && cat.validFromMonth >= month) {
+          // Category was created in this month or later – safe to hard delete
+          await CategoryModel.findOneAndDelete({ _id: id, userId });
+        } else {
+          // Soft delete: hide from this month onwards
+          await CategoryModel.findOneAndUpdate({ _id: id, userId }, { invalidFromMonth: month });
+        }
+      } else {
+        const result = await CategoryModel.findOneAndDelete({ _id: id, userId });
+        if (!result) {
+          res.status(404).json({ error: 'Category not found' });
+          return;
+        }
       }
     } else {
       const cat = memoryStore.categories.get(id);
@@ -463,7 +561,16 @@ app.delete('/categories/:id', authMiddleware, async (req: AuthRequest, res: Resp
         res.status(404).json({ error: 'Category not found' });
         return;
       }
-      memoryStore.categories.delete(id);
+      if (month) {
+        if (cat.validFromMonth && cat.validFromMonth >= month) {
+          memoryStore.categories.delete(id);
+        } else {
+          cat.invalidFromMonth = month;
+          memoryStore.categories.set(id, cat);
+        }
+      } else {
+        memoryStore.categories.delete(id);
+      }
       memoryStore.saveCategories();
     }
 
@@ -550,7 +657,7 @@ app.get('/expenses', authMiddleware, async (req: AuthRequest, res: Response): Pr
 app.post('/expenses', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
-    const { categoryId, amount, date, note } = req.body;
+    const { categoryId, amount, date, note, paidBy } = req.body;
 
     if (!categoryId || amount === undefined || amount === null || !date) {
       res.status(400).json({ error: 'Category, amount, and date are required' });
@@ -585,6 +692,7 @@ app.post('/expenses', authMiddleware, async (req: AuthRequest, res: Response): P
         amount: numAmount,
         date,
         note: note ? String(note).trim() : '',
+        paidBy: paidBy ? String(paidBy).trim() : '',
       });
     } else {
       categoryDetails = memoryStore.categories.get(categoryId);
@@ -601,6 +709,7 @@ app.post('/expenses', authMiddleware, async (req: AuthRequest, res: Response): P
         amount: numAmount,
         date,
         note: note ? String(note).trim() : '',
+        paidBy: paidBy ? String(paidBy).trim() : '',
       };
       memoryStore.expenses.set(_id, createdExpense);
       memoryStore.saveExpenses();
@@ -642,6 +751,140 @@ app.post('/expenses', authMiddleware, async (req: AuthRequest, res: Response): P
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to record expense: ' + err.message });
+  }
+});
+
+// GET /expenses/recent-writers – returns last 5 unique paidBy values for autofill
+app.get('/expenses/recent-writers', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId!;
+    let writers: string[] = [];
+
+    if (isMongoConnected) {
+      const results = await ExpenseModel.find({ userId, paidBy: { $nin: ['', null] } })
+        .sort({ _id: -1 })
+        .limit(50)
+        .lean();
+      const seen = new Set<string>();
+      for (const r of results as any[]) {
+        if (r.paidBy && !seen.has(r.paidBy)) {
+          seen.add(r.paidBy);
+          writers.push(r.paidBy);
+          if (writers.length >= 5) break;
+        }
+      }
+    } else {
+      const all = Array.from(memoryStore.expenses.values())
+        .filter((e) => e.userId === userId && e.paidBy)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const seen = new Set<string>();
+      for (const e of all) {
+        if (e.paidBy && !seen.has(e.paidBy)) {
+          seen.add(e.paidBy);
+          writers.push(e.paidBy);
+          if (writers.length >= 5) break;
+        }
+      }
+    }
+
+    res.json({ writers });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch recent writers: ' + err.message });
+  }
+});
+
+// PUT /expenses/:id – edit an existing expense
+app.put('/expenses/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId!;
+    const { id } = req.params;
+    const { categoryId, amount, date, note, paidBy } = req.body;
+
+    const numAmount = amount !== undefined ? Number(amount) : undefined;
+    if (numAmount !== undefined && (isNaN(numAmount) || numAmount <= 0)) {
+      res.status(400).json({ error: 'Amount must be a positive number' });
+      return;
+    }
+
+    if (date) {
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      if (!datePattern.test(date)) {
+        res.status(400).json({ error: 'Date must be formatted as YYYY-MM-DD' });
+        return;
+      }
+    }
+
+    let updatedExpense: any = null;
+    let oldDate: string | null = null;
+
+    if (isMongoConnected) {
+      const existing: any = await ExpenseModel.findOne({ _id: id, userId }).lean();
+      if (!existing) {
+        res.status(404).json({ error: 'Expense not found' });
+        return;
+      }
+      oldDate = existing.date;
+
+      const update: any = {};
+      if (categoryId) update.categoryId = categoryId;
+      if (numAmount !== undefined) update.amount = numAmount;
+      if (date) update.date = date;
+      if (note !== undefined) update.note = String(note).trim();
+      if (paidBy !== undefined) update.paidBy = String(paidBy).trim();
+
+      updatedExpense = await ExpenseModel.findOneAndUpdate({ _id: id, userId }, update, { new: true }).lean();
+    } else {
+      const exp = memoryStore.expenses.get(id);
+      if (!exp || exp.userId !== userId) {
+        res.status(404).json({ error: 'Expense not found' });
+        return;
+      }
+      oldDate = exp.date;
+      if (categoryId) exp.categoryId = categoryId;
+      if (numAmount !== undefined) exp.amount = numAmount;
+      if (date) exp.date = date;
+      if (note !== undefined) exp.note = String(note).trim();
+      if (paidBy !== undefined) exp.paidBy = String(paidBy).trim();
+      memoryStore.expenses.set(id, exp);
+      memoryStore.saveExpenses();
+      updatedExpense = exp;
+    }
+
+    // Refresh budget spent for affected months
+    const affectedDates = new Set<string>();
+    const finalDate = date || oldDate!;
+    affectedDates.add(finalDate.substring(0, 7));
+    if (oldDate) affectedDates.add(oldDate.substring(0, 7));
+
+    for (const ym of affectedDates) {
+      const [yStr, mStr] = ym.split('-');
+      const yr = parseInt(yStr, 10);
+      const mn = parseInt(mStr, 10);
+      const spent = await getMonthlySpent(userId, yr, mn);
+      if (isMongoConnected) {
+        await MonthlyBudgetModel.findOneAndUpdate({ userId, year: yr, month: mn }, { spent });
+      } else {
+        const bk = `${userId}_${yr}_${mn}`;
+        const b = memoryStore.monthlyBudgets.get(bk);
+        if (b) { b.spent = spent; memoryStore.saveBudgets(); }
+      }
+    }
+
+    // Populate category on response
+    let categoryDetails: any = null;
+    const catId = updatedExpense.categoryId;
+    if (isMongoConnected) {
+      categoryDetails = await CategoryModel.findOne({ _id: catId }).lean();
+    } else {
+      categoryDetails = memoryStore.categories.get(catId);
+    }
+
+    res.json({
+      ...(updatedExpense.toObject ? updatedExpense.toObject() : updatedExpense),
+      category: categoryDetails || { _id: catId, name_he: 'אחר', name_en: 'Other', icon: '🏷️', color: '#6b7280' },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update expense: ' + err.message });
   }
 });
 
@@ -709,33 +952,34 @@ app.get('/budget/:year/:month', authMiddleware, async (req: AuthRequest, res: Re
     }
 
     const spent = await getMonthlySpent(userId, year, month);
-    let planned = 0;
+    // Auto-calculate planned from sum of category budget limits for this month
+    const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+    const autoPlanned = await getCategoryBudgetSum(userId, monthStr);
+    let planned = autoPlanned;
     let budgetId = '';
 
     if (isMongoConnected) {
       let budget = await MonthlyBudgetModel.findOne({ userId, year, month }).lean();
       if (!budget) {
-        const created = await MonthlyBudgetModel.create({ userId, year, month, planned: 0, spent });
+        const created = await MonthlyBudgetModel.create({ userId, year, month, planned: autoPlanned, spent });
         budgetId = created._id.toString();
-        planned = 0;
       } else {
         budgetId = budget._id.toString();
-        planned = budget.planned || 0;
-        if (budget.spent !== spent) {
-          await MonthlyBudgetModel.updateOne({ _id: budget._id }, { spent });
-        }
+        // Always use auto-calculated planned; update stored value too
+        planned = autoPlanned;
+        await MonthlyBudgetModel.updateOne({ _id: budget._id }, { spent, planned: autoPlanned });
       }
     } else {
       const budgetKey = `${userId}_${year}_${month}`;
       let budget = memoryStore.monthlyBudgets.get(budgetKey);
       if (!budget) {
         budgetId = new Types.ObjectId().toString();
-        budget = { _id: budgetId, userId, year, month, planned: 0, spent };
+        budget = { _id: budgetId, userId, year, month, planned: autoPlanned, spent };
         memoryStore.monthlyBudgets.set(budgetKey, budget);
         memoryStore.saveBudgets();
       } else {
         budgetId = budget._id;
-        planned = budget.planned || 0;
+        budget.planned = autoPlanned;
         budget.spent = spent;
         memoryStore.saveBudgets();
       }

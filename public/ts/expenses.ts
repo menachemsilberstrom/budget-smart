@@ -13,7 +13,7 @@ import {
   toggleLanguage,
   logout,
 } from './api.js';
-import { fetchBudget, openBudgetModal, saveBudget } from './budget.js';
+import { fetchBudget } from './budget.js';
 
 export async function fetchExpenses(month?: string, categoryId?: string): Promise<Expense[]> {
   let url = '/expenses';
@@ -27,6 +27,19 @@ export async function fetchExpenses(month?: string, categoryId?: string): Promis
 
 export async function deleteExpense(id: string): Promise<void> {
   await api.delete(`/expenses/${id}`);
+}
+
+export async function updateExpense(id: string, data: Partial<Expense>): Promise<Expense> {
+  return await api.put<Expense>(`/expenses/${id}`, data);
+}
+
+async function fetchRecentWriters(): Promise<string[]> {
+  try {
+    const res = await api.get<{ writers: string[] }>('/expenses/recent-writers');
+    return res.writers || [];
+  } catch {
+    return [];
+  }
 }
 
 // -------------------------------------------------------------
@@ -59,7 +72,30 @@ export function initAddExpensePage(): void {
     });
   });
 
+  // Load recent writers for paidBy autofill
+  const paidByInput = document.getElementById('expense-paid-by') as HTMLInputElement;
+  if (paidByInput) {
+    // Pre-fill from localStorage last value
+    const lastPaidBy = localStorage.getItem('budgetsmart_last_paidby') || '';
+    if (lastPaidBy) paidByInput.value = lastPaidBy;
+
+    // Load and show recent writers as datalist suggestions
+    fetchRecentWriters().then((writers) => {
+      let datalist = document.getElementById('paidby-datalist');
+      if (!datalist) {
+        datalist = document.createElement('datalist');
+        datalist.id = 'paidby-datalist';
+        document.body.appendChild(datalist);
+      }
+      datalist.innerHTML = writers.map((w) => `<option value="${w}"></option>`).join('');
+      paidByInput.setAttribute('list', 'paidby-datalist');
+    });
+  }
+
   loadCategoriesForAdd();
+
+  // Reload categories when date changes (different month = different active categories)
+  dateInput?.addEventListener('change', () => loadCategoriesForAdd());
 
   const form = document.getElementById('add-expense-form') as HTMLFormElement;
   if (form) {
@@ -69,6 +105,7 @@ export function initAddExpensePage(): void {
       const selectedCatInput = document.getElementById('selected-category-id') as HTMLInputElement;
       const dateVal = dateInput.value;
       const noteInput = document.getElementById('expense-note') as HTMLInputElement;
+      const paidByVal = paidByInput ? paidByInput.value.trim() : '';
       const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
 
       const amount = parseFloat(amountInput.value);
@@ -99,7 +136,11 @@ export function initAddExpensePage(): void {
           amount,
           date: dateVal,
           note,
+          paidBy: paidByVal,
         });
+
+        // Remember last paidBy for next time
+        if (paidByVal) localStorage.setItem('budgetsmart_last_paidby', paidByVal);
 
         showToast(t('expenseAdded'), 'success');
         setTimeout(() => {
@@ -119,7 +160,9 @@ async function loadCategoriesForAdd(): Promise<void> {
   if (!container) return;
 
   try {
-    const categories = await api.get<Category[]>('/categories');
+    const dateInput = document.getElementById('expense-date') as HTMLInputElement;
+    const month = dateInput?.value ? dateInput.value.substring(0, 7) : new Date().toISOString().substring(0, 7);
+    const categories = await api.get<Category[]>(`/categories?month=${month}`);
     const selectedInput = document.getElementById('selected-category-id') as HTMLInputElement;
 
     if (categories.length === 0) {
@@ -157,6 +200,169 @@ async function loadCategoriesForAdd(): Promise<void> {
   } catch (err: any) {
     container.innerHTML = `<div class="toast error">${err.message}</div>`;
   }
+}
+
+// -------------------------------------------------------------
+// Category Expense Breakdown Modal (Feature 1)
+// -------------------------------------------------------------
+function openCategoryBreakdownModal(cat: Category, expenses: Expense[], monthLabel: string): void {
+  const existing = document.getElementById('cat-breakdown-modal');
+  if (existing) existing.remove();
+
+  const catName = getCategoryName(cat);
+  const catExpenses = expenses.filter((e) => e.categoryId === cat._id);
+  const total = catExpenses.reduce((s, e) => s + e.amount, 0);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cat-breakdown-modal';
+  overlay.className = 'modal-overlay';
+
+  const rowsHtml = catExpenses.length === 0
+    ? `<div class="text-muted text-center" style="padding: 16px;">${t('noExpensesForCategory')}</div>`
+    : catExpenses.map((exp) => `
+        <div class="expense-item" style="padding: 10px 0; border-bottom: 1px solid var(--border);">
+          <div class="expense-lead">
+            <div class="expense-info">
+              <span class="expense-title">${exp.note || catName}</span>
+              <span class="expense-meta">${formatDate(exp.date)}${exp.paidBy ? ' • ' + exp.paidBy : ''}</span>
+            </div>
+          </div>
+          <div class="expense-trailing">
+            <span class="expense-amount">${formatCurrency(exp.amount)}</span>
+            <button class="modal-del-btn delete-btn" data-id="${exp._id}" title="${t('delete')}" style="width:28px;height:28px;min-height:28px;font-size:0.9rem;">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="display:flex;align-items:center;gap:8px;">
+          <span style="background:${cat.color};border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;">${cat.icon}</span>
+          ${catName}
+        </h3>
+        <button type="button" class="modal-close" id="close-cat-breakdown">&times;</button>
+      </div>
+      <div style="padding: 8px 0; border-bottom: 1px solid var(--border); display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.82rem;color:var(--text-muted);">${monthLabel}</span>
+        <span style="font-weight:800;font-size:1.05rem;">${formatCurrency(total)}</span>
+      </div>
+      <div style="overflow-y: auto; flex: 1; padding: 0 4px;">
+        ${rowsHtml}
+      </div>
+      <div style="padding-top: 14px;">
+        <button type="button" class="btn btn-outline w-full" id="close-cat-breakdown-btn">${t('close')}</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  document.getElementById('close-cat-breakdown')?.addEventListener('click', close);
+  document.getElementById('close-cat-breakdown-btn')?.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  overlay.querySelectorAll('.modal-del-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+      if (!id || !confirm(t('confirmDeleteExpense'))) return;
+      try {
+        await deleteExpense(id);
+        showToast(t('expenseDeleted'), 'success');
+        close();
+        refreshDashboard();
+      } catch (err: any) {
+        showToast(err.message, 'error');
+      }
+    });
+  });
+}
+
+// -------------------------------------------------------------
+// Edit Expense Modal (Feature 3)
+// -------------------------------------------------------------
+function openEditExpenseModal(exp: Expense, categories: Category[], onSaved: () => void): void {
+  const existing = document.getElementById('edit-expense-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'edit-expense-modal';
+  overlay.className = 'modal-overlay';
+
+  const catOptions = categories
+    .map((c) => `<option value="${c._id}" ${c._id === exp.categoryId ? 'selected' : ''}>${getCategoryName(c)}</option>`)
+    .join('');
+
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">${t('editExpense')}</h3>
+        <button type="button" class="modal-close" id="close-edit-exp">&times;</button>
+      </div>
+      <form id="edit-expense-form">
+        <div class="form-group">
+          <label class="form-label">${t('amount')}</label>
+          <div class="amount-input-wrapper">
+            <span class="amount-currency">₪</span>
+            <input type="number" step="any" min="0.01" id="edit-exp-amount" class="form-input amount-input-lg" value="${exp.amount}" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('category')}</label>
+          <select id="edit-exp-category" class="form-select">${catOptions}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('date')}</label>
+          <input type="date" id="edit-exp-date" class="form-input" value="${exp.date}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('note')}</label>
+          <input type="text" id="edit-exp-note" class="form-input" value="${exp.note || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('paidBy')}</label>
+          <input type="text" id="edit-exp-paidby" class="form-input" value="${exp.paidBy || ''}" placeholder="${t('paidByPlaceholder')}" />
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button type="button" class="btn btn-outline" style="flex:1;" id="cancel-edit-exp">${t('cancel')}</button>
+          <button type="submit" class="btn btn-primary" style="flex:1;">${t('save')}</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  document.getElementById('close-edit-exp')?.addEventListener('click', close);
+  document.getElementById('cancel-edit-exp')?.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const form = document.getElementById('edit-expense-form') as HTMLFormElement;
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const amount = parseFloat((document.getElementById('edit-exp-amount') as HTMLInputElement).value);
+    const categoryId = (document.getElementById('edit-exp-category') as HTMLSelectElement).value;
+    const date = (document.getElementById('edit-exp-date') as HTMLInputElement).value;
+    const note = (document.getElementById('edit-exp-note') as HTMLInputElement).value.trim();
+    const paidBy = (document.getElementById('edit-exp-paidby') as HTMLInputElement).value.trim();
+
+    if (isNaN(amount) || amount <= 0) {
+      showToast(getCurrentLang() === 'he' ? 'נא להזין סכום תקין' : 'Please enter a valid amount', 'error');
+      return;
+    }
+
+    try {
+      await updateExpense(exp._id, { amount, categoryId, date, note, paidBy });
+      if (paidBy) localStorage.setItem('budgetsmart_last_paidby', paidBy);
+      showToast(t('expenseUpdated'), 'success');
+      close();
+      onSaved();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  });
 }
 
 // -------------------------------------------------------------
@@ -199,13 +405,10 @@ export async function initDashboardPage(): Promise<void> {
     refreshDashboard();
   });
 
+  // Budget is auto-calculated – button navigates to categories to edit limits
   document.getElementById('edit-budget-btn')?.addEventListener('click', () => {
-    const plannedEl = document.getElementById('stat-planned');
-    const curVal = plannedEl ? parseFloat(plannedEl.getAttribute('data-raw') || '0') : 0;
-    openBudgetModal(curVal, async (newVal) => {
-      await saveBudget(currentYear, currentMonth, newVal);
-      refreshDashboard();
-    });
+    const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    window.location.href = `/categories.html?month=${monthStr}`;
   });
 
   await refreshDashboard();
@@ -220,7 +423,7 @@ async function refreshDashboard(): Promise<void> {
     const [budgetData, expenses, categories] = await Promise.all([
       fetchBudget(currentYear, currentMonth),
       fetchExpenses(monthStr),
-      api.get<Category[]>('/categories'),
+      api.get<Category[]>(`/categories?month=${monthStr}`),
     ]);
 
     // Update Budget card
@@ -235,6 +438,9 @@ async function refreshDashboard(): Promise<void> {
       plannedEl.textContent = formatCurrency(budgetData.planned);
       plannedEl.setAttribute('data-raw', budgetData.planned.toString());
     }
+    // Update edit button label for auto-calc context
+    const editBtn = document.getElementById('edit-budget-btn');
+    if (editBtn) editBtn.textContent = getCurrentLang() === 'he' ? '⚙️ קטגוריות' : '⚙️ Categories';
     if (spentEl) {
       spentEl.textContent = formatCurrency(budgetData.spent);
     }
@@ -280,7 +486,12 @@ async function refreshDashboard(): Promise<void> {
   }
 }
 
+let _dashboardExpenses: Expense[] = [];
+let _dashboardCategories: Category[] = [];
+
 function renderCategoryBudgets(categories: Category[], expenses: Expense[]): void {
+  _dashboardExpenses = expenses;
+  _dashboardCategories = categories;
   const container = document.getElementById('category-budgets-container');
   if (!container) return;
 
@@ -343,7 +554,7 @@ function renderCategoryBudgets(categories: Category[], expenses: Expense[]): voi
       }
 
       return `
-        <div class="category-budget-card">
+        <div class="category-budget-card cat-clickable" data-cat-id="${cat._id}" style="cursor:pointer;">
           <div class="category-budget-header">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="category-tile-icon" style="width: 34px; height: 34px; font-size: 1.15rem; background-color: ${color};">
@@ -375,8 +586,21 @@ function renderCategoryBudgets(categories: Category[], expenses: Expense[]): voi
 
   container.querySelectorAll('.quick-edit-cat-budget').forEach((btn) => {
     btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const cat = JSON.parse((e.currentTarget as HTMLElement).getAttribute('data-cat') || '{}');
       openQuickCategoryBudgetModal(cat);
+    });
+  });
+
+  // Feature 1: click on category card opens expense breakdown modal
+  container.querySelectorAll('.cat-clickable').forEach((card) => {
+    card.addEventListener('click', () => {
+      const catId = (card as HTMLElement).getAttribute('data-cat-id');
+      const cat = _dashboardCategories.find((c) => c._id === catId);
+      if (!cat) return;
+      const date = new Date(currentYear, currentMonth - 1, 1);
+      const monthLabel = date.toLocaleDateString(getCurrentLang() === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' });
+      openCategoryBreakdownModal(cat, _dashboardExpenses, monthLabel);
     });
   });
 }
@@ -434,7 +658,8 @@ function openQuickCategoryBudgetModal(cat: Category): void {
     const newLimit = parseFloat(input.value) || 0;
 
     try {
-      await api.put(`/categories/${cat._id}`, { budgetLimit: newLimit });
+      const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+      await api.put(`/categories/${cat._id}?month=${monthStr}`, { budgetLimit: newLimit });
       showToast(t('budgetUpdated'), 'success');
       close();
       refreshDashboard();
@@ -486,9 +711,10 @@ function renderCategoryBreakdown(expenses: Expense[]): void {
       const catName = getCategoryName(item.cat);
       const icon = item.cat?.icon || '🏷️';
       const color = item.cat?.color || '#3b82f6';
+      const catId = item.cat?._id || '';
 
       return `
-        <div style="margin-bottom: 12px;">
+        <div class="spend-breakdown-row" data-cat-id="${catId}" style="margin-bottom: 12px; cursor: pointer;" title="${getCurrentLang() === 'he' ? 'לחץ לפירוט' : 'Click for details'}">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 1.1rem;">${icon}</span>
@@ -504,6 +730,18 @@ function renderCategoryBreakdown(expenses: Expense[]): void {
       `;
     })
     .join('');
+
+  container.querySelectorAll('.spend-breakdown-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const catId = (row as HTMLElement).getAttribute('data-cat-id');
+      const cat = _dashboardCategories.find((c) => c._id === catId) ||
+        totals.get(catId || '')?.cat;
+      if (!cat) return;
+      const date = new Date(currentYear, currentMonth - 1, 1);
+      const monthLabel = date.toLocaleDateString(getCurrentLang() === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' });
+      openCategoryBreakdownModal(cat, _dashboardExpenses, monthLabel);
+    });
+  });
 }
 
 function renderRecentExpenses(expenses: Expense[]): void {
@@ -524,18 +762,19 @@ function renderRecentExpenses(expenses: Expense[]): void {
   container.innerHTML = expenses
     .map(
       (exp) => `
-      <div class="expense-item">
+      <div class="expense-item" data-id="${exp._id}">
         <div class="expense-lead">
           <div class="expense-cat-badge" style="background-color: ${exp.category?.color || '#3b82f6'};">
             ${exp.category?.icon || '🏷️'}
           </div>
           <div class="expense-info">
             <span class="expense-title">${getCategoryName(exp.category)}</span>
-            <span class="expense-meta">${formatDate(exp.date)} ${exp.note ? ' • ' + exp.note : ''}</span>
+            <span class="expense-meta">${formatDate(exp.date)}${exp.note ? ' • ' + exp.note : ''}${exp.paidBy ? ' · ' + exp.paidBy : ''}</span>
           </div>
         </div>
         <div class="expense-trailing">
           <span class="expense-amount">${formatCurrency(exp.amount)}</span>
+          <button class="btn btn-outline btn-icon quick-edit-btn" data-id="${exp._id}" style="width:28px;height:28px;min-height:28px;font-size:0.85rem;" title="${t('editExpense')}">✏️</button>
           <button class="delete-btn quick-del-btn" data-id="${exp._id}" title="${t('delete')}">
             🗑️
           </button>
@@ -544,6 +783,18 @@ function renderRecentExpenses(expenses: Expense[]): void {
     `
     )
     .join('');
+
+  container.querySelectorAll('.quick-edit-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+      const exp = expenses.find((x) => x._id === id);
+      if (!exp) return;
+      const monthStr = exp.date.substring(0, 7);
+      let cats: Category[] = [];
+      try { cats = await api.get<Category[]>(`/categories?month=${monthStr}`); } catch {}
+      openEditExpenseModal(exp, cats.length ? cats : _dashboardCategories, () => refreshDashboard());
+    });
+  });
 
   container.querySelectorAll('.quick-del-btn').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
@@ -630,6 +881,9 @@ async function renderHistory(): Promise<void> {
       return;
     }
 
+    let allCats: Category[] = [];
+    try { allCats = await api.get<Category[]>('/categories'); } catch {}
+
     container.innerHTML = expenses
       .map(
         (exp) => `
@@ -640,11 +894,12 @@ async function renderHistory(): Promise<void> {
             </div>
             <div class="expense-info">
               <span class="expense-title">${getCategoryName(exp.category)}</span>
-              <span class="expense-meta">${formatDate(exp.date)} ${exp.note ? ' • ' + exp.note : ''}</span>
+              <span class="expense-meta">${formatDate(exp.date)}${exp.note ? ' • ' + exp.note : ''}${exp.paidBy ? ' · ' + exp.paidBy : ''}</span>
             </div>
           </div>
           <div class="expense-trailing">
             <span class="expense-amount">${formatCurrency(exp.amount)}</span>
+            <button class="btn btn-outline btn-icon history-edit-btn" data-id="${exp._id}" style="width:28px;height:28px;min-height:28px;font-size:0.85rem;" title="${t('editExpense')}">✏️</button>
             <button class="delete-btn history-del-btn" data-id="${exp._id}" title="${t('delete')}">
               🗑️
             </button>
@@ -653,6 +908,21 @@ async function renderHistory(): Promise<void> {
       `
       )
       .join('');
+
+    container.querySelectorAll('.history-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+        const exp = expenses.find((x) => x._id === id);
+        if (!exp) return;
+        const monthStr = exp.date.substring(0, 7);
+        const cats = allCats.filter((c) => {
+          const vfm = c.validFromMonth || '0000-01';
+          const ifm = c.invalidFromMonth;
+          return vfm <= monthStr && (!ifm || ifm > monthStr);
+        });
+        openEditExpenseModal(exp, cats.length ? cats : allCats, () => renderHistory());
+      });
+    });
 
     container.querySelectorAll('.history-del-btn').forEach((btn) => {
       btn.addEventListener('click', async (e) => {

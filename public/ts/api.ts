@@ -13,6 +13,8 @@ export interface Category {
   icon: string;
   color: string;
   budgetLimit?: number;
+  validFromMonth?: string;
+  invalidFromMonth?: string;
 }
 
 export interface Expense {
@@ -22,6 +24,7 @@ export interface Expense {
   amount: number;
   date: string;
   note?: string;
+  paidBy?: string;
   category?: Category;
 }
 
@@ -119,6 +122,21 @@ const translations: Record<string, { he: string; en: string }> = {
   outOf: { he: 'מתוך', en: 'out of' },
   budgetReached: { he: 'התקציב מוצה (100%)', en: 'Budget reached (100%)' },
   budgetUpdated: { he: 'התקציב עודכן בהצלחה', en: 'Budget updated successfully' },
+  autoCalculatedBudget: { he: 'מחושב אוטומטית מסכום קטגוריות', en: 'Auto-calculated from category totals' },
+
+  paidBy: { he: 'מי שילם / רשם', en: 'Who paid / recorded' },
+  paidByPlaceholder: { he: 'למשל: מנחם, שרה...', en: 'e.g. Menachem, Sarah...' },
+  recentWriters: { he: 'אנשים אחרונים', en: 'Recent people' },
+
+  editExpense: { he: 'ערוך הוצאה', en: 'Edit Expense' },
+  expenseUpdated: { he: 'ההוצאה עודכנה בהצלחה', en: 'Expense updated successfully' },
+
+  categoryExpenses: { he: 'הוצאות לפי קטגוריה', en: 'Expenses by Category' },
+  noExpensesForCategory: { he: 'אין הוצאות לקטגוריה זו בחודש זה', en: 'No expenses for this category this month' },
+  close: { he: 'סגור', en: 'Close' },
+
+  manageCategoriesForMonth: { he: 'קטגוריות לחודש', en: 'Categories for' },
+  categoryMonthNote: { he: 'שינויים יחולו מחודש זה ואילך', en: 'Changes apply from this month forward' },
 };
 
 // Language State
@@ -295,6 +313,8 @@ export const api = {
     request<T>(url, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   put: <T>(url: string, body?: any) =>
     request<T>(url, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(url: string, body?: any) =>
+    request<T>(url, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(url: string) => request<T>(url, { method: 'DELETE' }),
 };
 

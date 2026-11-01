@@ -11,13 +11,28 @@ const AVAILABLE_COLORS = [
 let selectedIcon = AVAILABLE_ICONS[0];
 let selectedColor = AVAILABLE_COLORS[0];
 let editingCategoryId = null;
-export async function fetchCategories() {
-    return await api.get('/categories');
+// Read month from URL params (e.g. ?month=2026-11)
+function getPageMonth() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('month') || new Date().toISOString().substring(0, 7);
+}
+export async function fetchCategories(month) {
+    const m = month || getPageMonth();
+    return await api.get(`/categories?month=${m}`);
 }
 document.addEventListener('DOMContentLoaded', async () => {
     if (!requireAuth())
         return;
     applyLanguage(getCurrentLang());
+    // Show month context in header
+    const month = getPageMonth();
+    const monthBanner = document.getElementById('categories-month-banner');
+    if (monthBanner) {
+        const [yr, mn] = month.split('-').map(Number);
+        const label = new Date(yr, mn - 1, 1).toLocaleDateString(getCurrentLang() === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' });
+        monthBanner.textContent = `${getCurrentLang() === 'he' ? 'מחודש' : 'From'}: ${label} — ${getCurrentLang() === 'he' ? 'שינויים יחולו מחודש זה ואילך' : 'Changes apply from this month forward'}`;
+        monthBanner.style.display = 'block';
+    }
     document.getElementById('lang-toggle-btn')?.addEventListener('click', () => {
         toggleLanguage();
         renderCategories();
@@ -35,9 +50,10 @@ async function renderCategories() {
     const container = document.getElementById('categories-list');
     if (!container)
         return;
+    const month = getPageMonth();
     try {
         container.innerHTML = `<div class="text-center text-muted" style="padding: 20px;">${getCurrentLang() === 'he' ? 'טוען קטגוריות...' : 'Loading categories...'}</div>`;
-        const categories = await fetchCategories();
+        const categories = await fetchCategories(month);
         if (categories.length === 0) {
             container.innerHTML = `
         <div class="empty-state">
@@ -94,7 +110,7 @@ async function renderCategories() {
                     return;
                 if (confirm(t('confirmDeleteCategory'))) {
                     try {
-                        await api.delete(`/categories/${id}`);
+                        await api.delete(`/categories/${id}?month=${month}`);
                         showToast(t('categoryDeleted'), 'success');
                         await renderCategories();
                     }
@@ -200,9 +216,10 @@ function openCategoryModal(catToEdit) {
             showToast(getCurrentLang() === 'he' ? 'נא למלא את שמות הקטגוריה' : 'Please provide category names', 'error');
             return;
         }
+        const month = getPageMonth();
         try {
             if (editingCategoryId) {
-                await api.put(`/categories/${editingCategoryId}`, {
+                await api.put(`/categories/${editingCategoryId}?month=${month}`, {
                     name_he,
                     name_en,
                     icon: selectedIcon,
@@ -212,7 +229,7 @@ function openCategoryModal(catToEdit) {
                 showToast(t('categoryUpdated'), 'success');
             }
             else {
-                await api.post('/categories', {
+                await api.post(`/categories?month=${month}`, {
                     name_he,
                     name_en,
                     icon: selectedIcon,
